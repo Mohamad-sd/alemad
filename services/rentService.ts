@@ -147,11 +147,21 @@ export const RentService = {
   async addPayment(paymentData: Omit<Payment, 'id' | 'date' | 'collectorId'>) {
       const db = await this.getDatabase();
       
+      const house = db.houses.find(h => h.id === paymentData.houseId);
+      const tenant = db.tenants.find(t => t.id === house?.tenantId);
+      const location = db.locations.find(l => l.id === house?.locationId);
+
+      // Create detailed name for snapshot
+      const houseNameSnapshot = house ? (location ? `${location.name} - ${house.name}` : house.name) : 'عقار محذوف';
+      const tenantNameSnapshot = tenant ? tenant.name : 'غير معروف';
+
       const newPayment: Payment = { 
           ...paymentData, 
           id: `pay${Date.now()}`, 
           date: new Date(), 
-          collectorId: 'collector1' 
+          collectorId: 'collector1',
+          tenantName: tenantNameSnapshot,
+          houseName: houseNameSnapshot
       };
       
       db.payments.push(newPayment);

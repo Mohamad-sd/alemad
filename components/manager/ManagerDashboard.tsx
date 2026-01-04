@@ -1,7 +1,7 @@
 
 import React, { useState, useContext, useMemo } from 'react';
 import { AppDataContext } from '../../App';
-import { House, NewLeaseRequest, Location, Payment } from '../../types';
+import { House, NewLeaseRequest, Location, Payment, PaymentMethod } from '../../types';
 import Button from '../shared/Button';
 import Card from '../shared/Card';
 import Modal from '../shared/Modal';
@@ -19,6 +19,7 @@ import DownloadIcon from '../icons/DownloadIcon';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 
 type ManagerView = 'dashboard' | 'management' | 'approvals' | 'handovers';
 
@@ -144,7 +145,7 @@ const exportToCSV = (data: any[], headers: string[], filename: string) => {
     document.body.removeChild(link);
 };
 
-// --- Helper for PDF Share ---
+// --- Helper for PDF Share with Robust Fallback ---
 const sharePDF = async (title: string, head: string[][], body: (string|number)[][], fileName: string) => {
     const doc = new jsPDF();
     
@@ -167,6 +168,14 @@ const sharePDF = async (title: string, head: string[][], body: (string|number)[]
     const pdfBlob = doc.output('blob');
     const file = new File([pdfBlob], `${fileName}.pdf`, { type: 'application/pdf' });
 
+    // Fallback function for download + wa link
+    const fallback = () => {
+         doc.save(`${fileName}.pdf`);
+         const text = `Please find the attached ${title} (Note: The file has been downloaded to your device, please attach it here).`;
+         const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+         window.open(waUrl, '_blank');
+    };
+
     // Try Web Share API (Mobile)
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
@@ -175,19 +184,25 @@ const sharePDF = async (title: string, head: string[][], body: (string|number)[]
                 title: title,
                 text: `Here is the ${title} report.`,
             });
-        } catch (error) {
-            console.log('Sharing failed', error);
+        } catch (error: any) {
+            // AbortError usually means user cancelled. Other errors mean failure -> fallback.
+            if (error.name !== 'AbortError') {
+                 console.log('Sharing failed', error);
+                 fallback();
+            }
         }
     } else {
-        // Fallback for Desktop: Download + WhatsApp Web Link
-        doc.save(`${fileName}.pdf`);
-        const waUrl = `https://wa.me/?text=${encodeURIComponent(`Please find the attached ${title} (downloaded to your device).`)}`;
-        window.open(waUrl, '_blank');
+        // Fallback for Desktop or unsupported browsers
+        fallback();
     }
 };
 
 const DashboardStats = () => {
     const context = useContext(AppDataContext);
+    const [viewReceipt, setViewReceipt] = useState<string | null>(null);
+    const [selectedReceiptPayment, setSelectedReceiptPayment] = useState<Payment | null>(null);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
     const stats = useMemo(() => {
         const houses = context?.houses || [];
         const payments = context?.payments || [];
@@ -203,13 +218,14 @@ const DashboardStats = () => {
             const house = context.houses.find(h => h.id === p.houseId);
             return {
                 Date: p.date.toLocaleDateString('en-GB'),
-                House: house?.name || 'Unknown',
+                House: p.houseName || house?.name || 'Unknown',
+                Tenant: p.tenantName || 'Unknown',
                 Amount: p.amount,
                 Method: p.method,
                 Collector: 'Collector'
             };
         });
-        exportToCSV(data, ['Date', 'House', 'Amount', 'Method', 'Collector'], 'Payment_Report');
+        exportToCSV(data, ['Date', 'House', 'Tenant', 'Amount', 'Method', 'Collector'], 'Payment_Report');
     };
 
     const handleExportHouses = () => {
@@ -233,12 +249,14 @@ const DashboardStats = () => {
 
     const handleSharePaymentsPDF = () => {
         if (!context) return;
-        const head = [['Date', 'Unit Name', 'Amount (SAR)', 'Method']];
+        const head = [['Date', 'Unit Name', 'Tenant', 'Amount (SAR)', 'Method']];
         const body = context.payments.map(p => {
             const house = context.houses.find(h => h.id === p.houseId);
+            const tenant = context.tenants.find(t => t.id === house?.tenantId);
             return [
                 p.date.toLocaleDateString('en-GB'),
-                house?.name || '-',
+                p.houseName || house?.name || '-',
+                p.tenantName || tenant?.name || '-',
                 p.amount.toLocaleString(),
                 p.method
             ];
@@ -257,6 +275,49 @@ const DashboardStats = () => {
             h.unpaidMonths && h.unpaidMonths.length > 0 ? h.unpaidMonths.join(', ') : '-'
         ]);
         sharePDF('Properties Status Report', head, body, 'properties_report');
+    };
+
+    const handleDownloadReceipt = async () => {
+        if (!selectedReceiptPayment) return;
+        
+        const element = document.getElementById('official-receipt-content');
+        if (!element) return;
+        
+        setIsGeneratingPdf(true);
+
+        try {
+            // Clone element for clean capture
+            const clone = element.cloneNode(true) as HTMLElement;
+            clone.style.position = 'absolute';
+            clone.style.left = '-9999px';
+            clone.style.top = '0';
+            clone.style.width = '500px'; 
+            clone.style.height = 'auto';
+            clone.style.backgroundColor = '#ffffff';
+            document.body.appendChild(clone);
+
+            const canvas = await html2canvas(clone, { 
+                scale: 2, 
+                backgroundColor: '#ffffff',
+                useCORS: true 
+            });
+            document.body.removeChild(clone);
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
+            
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`receipt_${selectedReceiptPayment.id}.pdf`);
+        } catch(e) {
+            console.error(e);
+            alert("فشل تحميل السند");
+        } finally {
+            setIsGeneratingPdf(false);
+        }
     };
 
     return (
@@ -283,16 +344,29 @@ const DashboardStats = () => {
                                         <th className="pb-3 px-2">الشقة</th>
                                         <th className="pb-3 px-2">المبلغ</th>
                                         <th className="pb-3 px-2">التاريخ</th>
-                                        <th className="pb-3 px-2">المحصل</th>
+                                        <th className="pb-3 px-2">التفاصيل</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {context?.payments.slice(-5).reverse().map(p => (
+                                    {context?.payments.slice(-10).reverse().map(p => (
                                         <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="py-4 px-2 font-medium">{context.houses.find(h => h.id === p.houseId)?.name}</td>
+                                            <td className="py-4 px-2 font-medium">
+                                                <p>{p.houseName || context.houses.find(h => h.id === p.houseId)?.name}</p>
+                                                <p className="text-[10px] text-gray-400">{p.tenantName || '---'}</p>
+                                            </td>
                                             <td className="py-4 px-2 text-green-600 font-bold">{p.amount.toLocaleString()} ريال</td>
                                             <td className="py-4 px-2 text-xs text-gray-500">{p.date.toLocaleDateString('en-GB')}</td>
-                                            <td className="py-4 px-2 text-xs">أحمد (محصل 1)</td>
+                                            <td className="py-4 px-2 text-xs flex flex-col gap-2">
+                                                <button onClick={() => setSelectedReceiptPayment(p)} className="text-white bg-gray-800 hover:bg-black px-2 py-1 rounded text-[10px] w-fit">
+                                                    عرض السند الرسمي
+                                                </button>
+                                                
+                                                {p.method === PaymentMethod.BANK_TRANSFER && p.receiptUrl && (
+                                                    <button onClick={() => setViewReceipt(p.receiptUrl || null)} className="text-blue-500 hover:text-blue-700 underline text-[10px] block w-fit">
+                                                        صورة الحوالة
+                                                    </button>
+                                                )}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -327,6 +401,87 @@ const DashboardStats = () => {
                     </Card>
                 </div>
             </div>
+
+            {/* Bank Transfer Receipt Modal */}
+            <Modal isOpen={!!viewReceipt} onClose={() => setViewReceipt(null)} title="صورة إيصال التحويل">
+                <div className="flex flex-col gap-4">
+                    {viewReceipt && (
+                        <img src={viewReceipt} alt="Receipt" className="w-full h-auto rounded-lg shadow-lg border border-gray-200" />
+                    )}
+                    <Button onClick={() => setViewReceipt(null)} className="w-full" variant="secondary">إغلاق</Button>
+                </div>
+            </Modal>
+
+            {/* Official System Receipt Modal */}
+            <Modal isOpen={!!selectedReceiptPayment} onClose={() => setSelectedReceiptPayment(null)} title="سند القبض الرسمي">
+                <div className="space-y-6">
+                    {selectedReceiptPayment && (
+                        <div id="official-receipt-content" className="bg-white border-2 border-gray-800 p-8 rounded-none relative overflow-hidden text-right shadow-none mx-auto max-w-md">
+                            <div className="flex justify-between items-start mb-8 border-b-2 border-gray-800 pb-4">
+                                <div className="text-right">
+                                    <h2 className="text-2xl font-bold text-gray-900 mb-1">سند قبض</h2>
+                                    <p className="text-sm text-gray-500 font-serif tracking-widest">RECEIPT VOUCHER</p>
+                                </div>
+                                <div className="text-left bg-gray-100 p-2 rounded">
+                                    <p className="font-mono font-bold text-lg text-gray-800">NO. {selectedReceiptPayment.id.slice(-6)}</p>
+                                    <p className="text-xs text-gray-500 mt-1">{selectedReceiptPayment.date.toLocaleDateString('en-GB')}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-5 text-base relative z-10">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-gray-500 w-24 shrink-0">استلمنا من:</span>
+                                    <span className="font-bold text-lg border-b border-gray-300 flex-1 pb-1">
+                                        {selectedReceiptPayment.tenantName || context?.tenants.find(t=>t.id === context.houses.find(h=>h.id===selectedReceiptPayment.houseId)?.tenantId)?.name || 'غير متوفر'}
+                                    </span>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                    <span className="text-gray-500 w-24 shrink-0">مبلغ وقدره:</span>
+                                    <span className="font-bold text-xl text-blue-800 border-b border-gray-300 flex-1 pb-1">{selectedReceiptPayment.amount.toLocaleString()} ريال سعودي</span>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                    <span className="text-gray-500 w-24 shrink-0">وذلك عن:</span>
+                                    <span className="font-bold border-b border-gray-300 flex-1 pb-1">
+                                        {selectedReceiptPayment.houseName || context?.houses.find(h=>h.id === selectedReceiptPayment.houseId)?.name || 'عقار'}
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <span className="text-gray-500 w-24 shrink-0">طريقة الدفع:</span>
+                                    <span className="font-bold border-b border-gray-300 flex-1 pb-1">{selectedReceiptPayment.method}</span>
+                                </div>
+                            </div>
+
+                            <div className="mt-12 pt-4 flex justify-between items-end relative z-10">
+                                <div className="text-center">
+                                    <p className="text-xs text-gray-400 mb-2">توقيع المحصل</p>
+                                    <div className="h-10 border-b border-dashed border-gray-400 min-w-[100px] flex items-end justify-center">
+                                        <p className="font-bold font-script text-blue-800">المحصل</p>
+                                    </div>
+                                </div>
+                                <div className="text-center">
+                                     <div className="w-20 h-20 border-2 border-blue-900 rounded-full flex items-center justify-center opacity-20 rotate-12">
+                                        <BuildingIcon className="w-12 h-12"/>
+                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="flex gap-2">
+                        <Button 
+                            onClick={handleDownloadReceipt}
+                            disabled={isGeneratingPdf}
+                            className="w-full flex justify-center items-center gap-2"
+                        >
+                            <DownloadIcon className="w-5 h-5"/> {isGeneratingPdf ? 'جاري التحميل...' : 'تحميل PDF'}
+                        </Button>
+                        <Button onClick={() => setSelectedReceiptPayment(null)} variant="secondary" className="w-1/3">إغلاق</Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

@@ -53,6 +53,7 @@ export const useAppData = () => {
     const result = await RentService.addPayment(paymentData);
     setPayments(prev => [...prev, result.payment]);
     setHouses(result.houses);
+    return result.payment; // Return the payment object
   }, []);
 
   const addLeaseRequest = useCallback(async (requestData: any) => {

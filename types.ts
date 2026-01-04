@@ -41,6 +41,9 @@ export interface Payment {
   receiptUrl?: string;
   date: Date;
   collectorId: string;
+  // Snapshot fields to preserve history if tenant changes
+  tenantName?: string; 
+  houseName?: string;
 }
 
 export interface NewLeaseRequest {

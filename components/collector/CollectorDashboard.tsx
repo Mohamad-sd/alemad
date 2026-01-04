@@ -13,8 +13,22 @@ import BuildingIcon from '../icons/BuildingIcon';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
 import UserIcon from '../icons/UserIcon';
 import DollarSignIcon from '../icons/DollarSignIcon';
+import CheckCircleIcon from '../icons/CheckCircleIcon';
+import DownloadIcon from '../icons/DownloadIcon';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 type CollectorView = 'collection' | 'vacant' | 'reports';
+
+interface ReceiptData {
+    id: string;
+    date: Date;
+    amount: number;
+    tenantName: string;
+    houseName: string;
+    method: string;
+    collectorName: string;
+}
 
 const CollectorDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [currentView, setCurrentView] = useState<CollectorView>('collection');
@@ -69,6 +83,11 @@ const CollectionScreen = () => {
     const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState<number>(0);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    
+    // Receipt State
+    const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
     const filteredHouses = (context?.houses || []).filter(h => {
         const matchesLocation = !selectedLocation || h.locationId === selectedLocation;
@@ -79,17 +98,175 @@ const CollectionScreen = () => {
     const handleHouseSelect = (house: House) => {
         setSelectedHouse(house);
         setPaymentAmount(house.dueAmount);
+        setPaymentMethod(PaymentMethod.CASH);
+        setReceiptFile(null);
     };
     
-    const handleAddPayment = () => {
+    const handleAddPayment = async () => {
         if (selectedHouse && paymentAmount > 0) {
-            context?.addPayment({
+            let receiptUrl: string | undefined = undefined;
+
+            // Handle Receipt Upload for Bank Transfer
+            if (paymentMethod === PaymentMethod.BANK_TRANSFER) {
+                if (!receiptFile) {
+                    alert("يرجى إرفاق صورة إيصال التحويل البنكي");
+                    return;
+                }
+
+                try {
+                    const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.readAsDataURL(file);
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = error => reject(error);
+                    });
+                    receiptUrl = await toBase64(receiptFile);
+                } catch (e) {
+                    alert("حدث خطأ أثناء معالجة الصورة");
+                    return;
+                }
+            }
+
+            const newPayment = await context?.addPayment({
                 houseId: selectedHouse.id,
                 amount: paymentAmount,
                 method: paymentMethod,
+                receiptUrl: receiptUrl
             });
+            
+            if (newPayment) {
+                const tenant = context?.tenants.find(t => t.id === selectedHouse.tenantId);
+                const location = context?.locations.find(l => l.id === selectedHouse.locationId);
+                const fullHouseName = location ? `${location.name} - ${selectedHouse.name}` : selectedHouse.name;
+
+                setReceiptData({
+                    id: newPayment.id,
+                    date: newPayment.date,
+                    amount: newPayment.amount,
+                    tenantName: tenant?.name || 'مجهول',
+                    houseName: fullHouseName,
+                    method: newPayment.method,
+                    collectorName: 'المحصل'
+                });
+            }
+
             setPaymentModalOpen(false);
             setSelectedHouse(null);
+            setReceiptFile(null);
+            setPaymentAmount(0);
+        }
+    };
+
+    const generatePdfBlob = async (): Promise<Blob> => {
+        const element = document.getElementById('receipt-content');
+        if (!element) throw new Error("Receipt element not found");
+
+        // Clone element to ensure clean capture regardless of screen size or modal state
+        const clone = element.cloneNode(true) as HTMLElement;
+        clone.style.position = 'absolute';
+        clone.style.left = '-9999px';
+        clone.style.top = '0';
+        clone.style.width = '500px'; // Fixed width for consistent PDF look
+        clone.style.height = 'auto';
+        clone.style.backgroundColor = '#ffffff';
+        document.body.appendChild(clone);
+
+        try {
+            const canvas = await html2canvas(clone, { 
+                scale: 2,
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                logging: false
+            });
+            const imgData = canvas.toDataURL('image/png');
+
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a5'
+            });
+
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            return pdf.output('blob');
+        } finally {
+            document.body.removeChild(clone);
+        }
+    };
+
+    const fallbackDownload = (blob: Blob, fileName: string) => {
+        // Fallback: Download the file and open WhatsApp Web link
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        setTimeout(() => {
+            const text = `السلام عليكم، مرفق سند القبض رقم ${receiptData?.id}. (ملاحظة: تم تحميل الملف على جهازك، يرجى إرفاقه هنا)`;
+            const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            window.open(waUrl, '_blank');
+        }, 500);
+    };
+
+    const handleShareReceiptPDF = async () => {
+        if (!receiptData) return;
+        setIsGeneratingPdf(true);
+
+        try {
+            const pdfBlob = await generatePdfBlob();
+            const fileName = `receipt_${receiptData.id}.pdf`;
+            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+            // Try Native Share First
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: 'سند قبض إيجار',
+                        text: `مرفق سند القبض رقم ${receiptData.id} الخاص بـ ${receiptData.tenantName}`
+                    });
+                } catch (err: any) {
+                    // If user cancelled, do nothing. If error, use fallback.
+                    if (err.name !== 'AbortError') {
+                        console.warn('Native share failed, using fallback:', err);
+                        fallbackDownload(pdfBlob, fileName);
+                    }
+                }
+            } else {
+                // Native share not supported, use fallback immediately
+                fallbackDownload(pdfBlob, fileName);
+            }
+        } catch (error) {
+            console.error("Error generating PDF", error);
+            alert("حدث خطأ أثناء إنشاء ملف PDF");
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    };
+
+    const handleDownloadOnly = async () => {
+        if (!receiptData) return;
+        setIsGeneratingPdf(true);
+        try {
+            const pdfBlob = await generatePdfBlob();
+            const fileName = `receipt_${receiptData.id}.pdf`;
+            const url = URL.createObjectURL(pdfBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            alert("حدث خطأ أثناء التحميل");
+        } finally {
+            setIsGeneratingPdf(false);
         }
     };
 
@@ -144,11 +321,115 @@ const CollectionScreen = () => {
                          <p className="text-sm text-blue-800 font-bold">المبلغ المتبقي على المستأجر: {selectedHouse?.dueAmount.toLocaleString()} ريال</p>
                     </div>
                     <Input label="المبلغ المستلم الآن" type="number" value={paymentAmount} onChange={e => setPaymentAmount(parseFloat(e.target.value))}/>
+                    
                     <Select label="طريقة الاستلام" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}>
                         <option value={PaymentMethod.CASH}>نقدي (كاش)</option>
                         <option value={PaymentMethod.BANK_TRANSFER}>تحويل بنكي</option>
                     </Select>
+
+                    {paymentMethod === PaymentMethod.BANK_TRANSFER && (
+                        <div className="bg-gray-50 p-3 rounded-lg border border-dashed border-gray-300">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">صورة إيصال التحويل (مطلوب)</label>
+                            <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={(e) => setReceiptFile(e.target.files ? e.target.files[0] : null)}
+                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                        </div>
+                    )}
+
                     <Button onClick={handleAddPayment} className="w-full py-3 text-lg" variant="success">تأكيد الاستلام</Button>
+                </div>
+            </Modal>
+
+            {/* Receipt Modal */}
+            <Modal isOpen={!!receiptData} onClose={() => setReceiptData(null)} title="سند قبض">
+                <div className="space-y-6 text-center">
+                    <div className="flex flex-col items-center justify-center text-green-600 animate-fadeIn">
+                        <CheckCircleIcon className="w-16 h-16 mb-2"/>
+                        <h3 className="text-xl font-bold">تمت العملية بنجاح</h3>
+                    </div>
+
+                    {receiptData && (
+                        <div id="receipt-content" className="bg-white border-2 border-gray-800 p-8 rounded-none relative overflow-hidden text-right shadow-none mx-auto max-w-md">
+                            <div className="flex justify-between items-start mb-8 border-b-2 border-gray-800 pb-4">
+                                <div className="text-right">
+                                    <h2 className="text-2xl font-bold text-gray-900 mb-1">سند قبض</h2>
+                                    <p className="text-sm text-gray-500 font-serif tracking-widest">RECEIPT VOUCHER</p>
+                                </div>
+                                <div className="text-left bg-gray-100 p-2 rounded">
+                                    <p className="font-mono font-bold text-lg text-gray-800">NO. {receiptData.id.slice(-6)}</p>
+                                    <p className="text-xs text-gray-500 mt-1">{receiptData.date.toLocaleDateString('en-GB')}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-5 text-base relative z-10">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-gray-500 w-24 shrink-0">استلمنا من:</span>
+                                    <span className="font-bold text-lg border-b border-gray-300 flex-1 pb-1">{receiptData.tenantName}</span>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                    <span className="text-gray-500 w-24 shrink-0">مبلغ وقدره:</span>
+                                    <span className="font-bold text-xl text-blue-800 border-b border-gray-300 flex-1 pb-1">{receiptData.amount.toLocaleString()} ريال سعودي</span>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                    <span className="text-gray-500 w-24 shrink-0">وذلك عن:</span>
+                                    <span className="font-bold border-b border-gray-300 flex-1 pb-1">{receiptData.houseName}</span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <span className="text-gray-500 w-24 shrink-0">طريقة الدفع:</span>
+                                    <span className="font-bold border-b border-gray-300 flex-1 pb-1">{receiptData.method}</span>
+                                </div>
+                            </div>
+
+                            <div className="mt-12 pt-4 flex justify-between items-end relative z-10">
+                                <div className="text-center">
+                                    <p className="text-xs text-gray-400 mb-2">توقيع المحصل</p>
+                                    <div className="h-10 border-b border-dashed border-gray-400 min-w-[100px] flex items-end justify-center">
+                                        <p className="font-bold font-script text-blue-800">{receiptData.collectorName}</p>
+                                    </div>
+                                </div>
+                                <div className="text-center">
+                                     <div className="w-20 h-20 border-2 border-blue-900 rounded-full flex items-center justify-center opacity-20 rotate-12">
+                                        <BuildingIcon className="w-12 h-12"/>
+                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col gap-3">
+                        <Button 
+                            onClick={handleShareReceiptPDF} 
+                            disabled={isGeneratingPdf}
+                            className={`w-full text-white flex items-center justify-center gap-2 ${isGeneratingPdf ? 'bg-gray-400' : 'bg-[#25D366] hover:bg-[#128C7E]'}`}
+                        >
+                            {isGeneratingPdf ? (
+                                <span>جاري المعالجة...</span>
+                            ) : (
+                                <>
+                                    <WhatsAppIcon className="w-5 h-5"/> مشاركة عبر واتساب
+                                </>
+                            )}
+                        </Button>
+
+                        <Button 
+                            onClick={handleDownloadOnly}
+                            disabled={isGeneratingPdf}
+                            variant="primary"
+                            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
+                        >
+                             <DownloadIcon className="w-5 h-5"/> تحميل السند كـ PDF
+                        </Button>
+
+                        <Button onClick={() => setReceiptData(null)} variant="secondary" className="w-full bg-gray-200 text-gray-800 hover:bg-gray-300">
+                            إغلاق
+                        </Button>
+                    </div>
                 </div>
             </Modal>
         </div>
