@@ -65,15 +65,15 @@ const ManagerDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 right-0 z-30 w-72 bg-gray-900 text-white flex flex-col shadow-2xl 
+        fixed inset-y-0 right-0 z-30 w-64 bg-gray-900 text-white flex flex-col shadow-2xl 
         transition-transform duration-300 ease-in-out
         md:relative md:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
-        <div className="p-6 border-b border-gray-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <div className="bg-blue-600 p-2 rounded-lg"><BuildingIcon className="w-6 h-6"/></div>
-             <h1 className="text-xl font-bold tracking-tight">لوحة الإدارة</h1>
+        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+             <div className="bg-blue-600 p-1.5 rounded-lg"><BuildingIcon className="w-5 h-5"/></div>
+             <h1 className="text-lg font-bold tracking-tight">لوحة الإدارة</h1>
           </div>
           {/* Close button for mobile inside sidebar */}
           <button onClick={() => setSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-white">
@@ -81,14 +81,14 @@ const ManagerDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           </button>
         </div>
 
-        <nav className="flex-1 p-4 flex flex-col gap-2 overflow-y-auto">
+        <nav className="flex-1 p-3 flex flex-col gap-1 overflow-y-auto">
           <SidebarLink active={currentView === 'dashboard'} onClick={() => handleNavClick('dashboard')} label="نظرة عامة والتقارير" icon={<DollarSignIcon className="w-5 h-5"/>} />
           <SidebarLink active={currentView === 'management'} onClick={() => handleNavClick('management')} label="إدارة العقارات" icon={<HomeIcon className="w-5 h-5"/>} />
           <SidebarLink active={currentView === 'approvals'} onClick={() => handleNavClick('approvals')} label="الموافقات" icon={<CheckCircleIcon className="w-5 h-5"/>} badge={pendingCount} />
           <SidebarLink active={currentView === 'handovers'} onClick={() => handleNavClick('handovers')} label="تسليم المبالغ" icon={<ReportIcon className="w-5 h-5"/>} />
         </nav>
         <div className="p-4 border-t border-gray-800">
-          <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white transition-all font-bold">تسجيل الخروج</button>
+          <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 p-2.5 rounded-lg bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white transition-all font-bold text-sm">تسجيل الخروج</button>
         </div>
       </aside>
 
@@ -114,10 +114,10 @@ const ManagerDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 };
 
 const SidebarLink = ({ active, onClick, label, icon, badge }: any) => (
-    <button onClick={onClick} className={`flex items-center justify-between p-3 rounded-xl transition-all w-full ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>
+    <button onClick={onClick} className={`flex items-center justify-between p-2.5 rounded-xl transition-all w-full ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>
         <div className="flex items-center gap-3">
             {icon}
-            <span className="font-medium text-sm md:text-base">{label}</span>
+            <span className="font-medium text-sm">{label}</span>
         </div>
         {badge > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{badge}</span>}
     </button>
