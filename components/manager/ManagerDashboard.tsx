@@ -22,8 +22,16 @@ import autoTable from 'jspdf-autotable';
 
 type ManagerView = 'dashboard' | 'management' | 'approvals' | 'handovers';
 
+// Simple Menu Icon Component
+const MenuIcon = ({ className = "w-6 h-6" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+  </svg>
+);
+
 const ManagerDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [currentView, setCurrentView] = useState<ManagerView>('dashboard');
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
   const context = useContext(AppDataContext);
 
   if (!context || !context.isLoaded) return <div className="flex items-center justify-center h-screen">جاري التحميل...</div>;
@@ -40,35 +48,76 @@ const ManagerDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     }
   };
 
+  const handleNavClick = (view: ManagerView) => {
+      setCurrentView(view);
+      setSidebarOpen(false); // Close sidebar on mobile after selection
+  };
+
   return (
-    <div className="flex h-screen bg-gray-100 font-sans">
-      <aside className="w-72 bg-gray-900 text-white flex flex-col shadow-2xl z-10">
-        <div className="p-6 border-b border-gray-800 flex items-center gap-3">
-          <div className="bg-blue-600 p-2 rounded-lg"><BuildingIcon className="w-6 h-6"/></div>
-          <h1 className="text-xl font-bold tracking-tight">لوحة الإدارة</h1>
+    <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
+      {/* Mobile Overlay */}
+      {isSidebarOpen && (
+        <div 
+            className="fixed inset-0 bg-black/50 z-20 md:hidden transition-opacity"
+            onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed inset-y-0 right-0 z-30 w-72 bg-gray-900 text-white flex flex-col shadow-2xl 
+        transition-transform duration-300 ease-in-out
+        md:relative md:translate-x-0
+        ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+      `}>
+        <div className="p-6 border-b border-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+             <div className="bg-blue-600 p-2 rounded-lg"><BuildingIcon className="w-6 h-6"/></div>
+             <h1 className="text-xl font-bold tracking-tight">لوحة الإدارة</h1>
+          </div>
+          {/* Close button for mobile inside sidebar */}
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-gray-400 hover:text-white">
+            <XCircleIcon className="w-6 h-6" />
+          </button>
         </div>
-        <nav className="flex-1 p-4 flex flex-col gap-2">
-          <SidebarLink active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} label="نظرة عامة والتقارير" icon={<DollarSignIcon className="w-5 h-5"/>} />
-          <SidebarLink active={currentView === 'management'} onClick={() => setCurrentView('management')} label="إدارة العقارات" icon={<HomeIcon className="w-5 h-5"/>} />
-          <SidebarLink active={currentView === 'approvals'} onClick={() => setCurrentView('approvals')} label="الموافقات" icon={<CheckCircleIcon className="w-5 h-5"/>} badge={pendingCount} />
-          <SidebarLink active={currentView === 'handovers'} onClick={() => setCurrentView('handovers')} label="تسليم المبالغ" icon={<ReportIcon className="w-5 h-5"/>} />
+
+        <nav className="flex-1 p-4 flex flex-col gap-2 overflow-y-auto">
+          <SidebarLink active={currentView === 'dashboard'} onClick={() => handleNavClick('dashboard')} label="نظرة عامة والتقارير" icon={<DollarSignIcon className="w-5 h-5"/>} />
+          <SidebarLink active={currentView === 'management'} onClick={() => handleNavClick('management')} label="إدارة العقارات" icon={<HomeIcon className="w-5 h-5"/>} />
+          <SidebarLink active={currentView === 'approvals'} onClick={() => handleNavClick('approvals')} label="الموافقات" icon={<CheckCircleIcon className="w-5 h-5"/>} badge={pendingCount} />
+          <SidebarLink active={currentView === 'handovers'} onClick={() => handleNavClick('handovers')} label="تسليم المبالغ" icon={<ReportIcon className="w-5 h-5"/>} />
         </nav>
         <div className="p-4 border-t border-gray-800">
           <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white transition-all font-bold">تسجيل الخروج</button>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto bg-gray-50 p-8">
-        {renderCurrentView()}
-      </main>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+          {/* Mobile Header */}
+          <header className="md:hidden bg-white shadow-sm p-4 flex justify-between items-center z-10">
+              <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-bold text-gray-800">لوحة الإدارة</h1>
+                  {pendingCount > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{pendingCount}</span>}
+              </div>
+              <button onClick={() => setSidebarOpen(true)} className="text-gray-700 p-1 rounded hover:bg-gray-100">
+                  <MenuIcon className="w-7 h-7" />
+              </button>
+          </header>
+
+          <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-8 pb-20 md:pb-8">
+            {renderCurrentView()}
+          </main>
+      </div>
     </div>
   );
 };
 
 const SidebarLink = ({ active, onClick, label, icon, badge }: any) => (
-    <button onClick={onClick} className={`flex items-center justify-between p-3 rounded-xl transition-all ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>
+    <button onClick={onClick} className={`flex items-center justify-between p-3 rounded-xl transition-all w-full ${active ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'}`}>
         <div className="flex items-center gap-3">
             {icon}
-            <span className="font-medium">{label}</span>
+            <span className="font-medium text-sm md:text-base">{label}</span>
         </div>
         {badge > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{badge}</span>}
     </button>
@@ -211,13 +260,13 @@ const DashboardStats = () => {
     };
 
     return (
-        <div className="space-y-8 animate-fadeIn">
-            <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-800">ملخص الأعمال اليوم</h2>
-                <div className="text-sm text-gray-500 bg-white px-4 py-2 rounded-full shadow-sm">{new Date().toLocaleDateString('en-GB')}</div>
+        <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                <h2 className="text-xl md:text-2xl font-bold text-gray-800">ملخص الأعمال اليوم</h2>
+                <div className="text-xs md:text-sm text-gray-500 bg-white px-4 py-2 rounded-full shadow-sm">{new Date().toLocaleDateString('en-GB')}</div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 <StatBox label="إجمالي المحصل" value={`${stats.totalCollected.toLocaleString()} ر.س`} color="blue" />
                 <StatBox label="إجمالي المستحق" value={`${stats.totalDue.toLocaleString()} ر.س`} color="red" />
                 <StatBox label="عقارات مؤجرة" value={stats.rentedCount} color="green" />
@@ -228,22 +277,22 @@ const DashboardStats = () => {
                 <div className="lg:col-span-2">
                     <Card title="آخر المدفوعات المستلمة">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-right">
+                            <table className="w-full text-right min-w-[500px]">
                                 <thead className="text-gray-400 text-xs uppercase border-b">
                                     <tr>
-                                        <th className="pb-3">الشقة</th>
-                                        <th className="pb-3">المبلغ</th>
-                                        <th className="pb-3">التاريخ</th>
-                                        <th className="pb-3">المحصل</th>
+                                        <th className="pb-3 px-2">الشقة</th>
+                                        <th className="pb-3 px-2">المبلغ</th>
+                                        <th className="pb-3 px-2">التاريخ</th>
+                                        <th className="pb-3 px-2">المحصل</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
                                     {context?.payments.slice(-5).reverse().map(p => (
                                         <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="py-4 font-medium">{context.houses.find(h => h.id === p.houseId)?.name}</td>
-                                            <td className="py-4 text-green-600 font-bold">{p.amount.toLocaleString()} ريال</td>
-                                            <td className="py-4 text-xs text-gray-500">{p.date.toLocaleDateString('en-GB')}</td>
-                                            <td className="py-4 text-xs">أحمد (محصل 1)</td>
+                                            <td className="py-4 px-2 font-medium">{context.houses.find(h => h.id === p.houseId)?.name}</td>
+                                            <td className="py-4 px-2 text-green-600 font-bold">{p.amount.toLocaleString()} ريال</td>
+                                            <td className="py-4 px-2 text-xs text-gray-500">{p.date.toLocaleDateString('en-GB')}</td>
+                                            <td className="py-4 px-2 text-xs">أحمد (محصل 1)</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -253,24 +302,24 @@ const DashboardStats = () => {
                 </div>
                 
                 <div className="lg:col-span-1">
-                    <Card title="مركز التقارير (Excel & PDF)" className="h-full flex flex-col justify-center">
+                    <Card title="مركز التقارير" className="h-full flex flex-col justify-center">
                         <div className="space-y-4">
                             <p className="text-sm text-gray-500 mb-4">تصدير البيانات أو مشاركتها عبر واتساب (PDF).</p>
                             
                             <div className="grid grid-cols-2 gap-2">
-                                <Button onClick={handleExportPayments} variant="secondary" className="text-xs px-2" title="تصدير Excel">
+                                <Button onClick={handleExportPayments} variant="secondary" className="text-[10px] md:text-xs px-1 md:px-2 flex flex-col md:flex-row gap-1 items-center" title="تصدير Excel">
                                     <DownloadIcon className="w-4 h-4"/> سجل المدفوعات
                                 </Button>
-                                <Button onClick={handleSharePaymentsPDF} className="bg-green-600 hover:bg-green-700 text-xs px-2" title="مشاركة واتساب">
+                                <Button onClick={handleSharePaymentsPDF} className="bg-green-600 hover:bg-green-700 text-[10px] md:text-xs px-1 md:px-2 flex flex-col md:flex-row gap-1 items-center" title="مشاركة واتساب">
                                     <WhatsAppIcon className="w-4 h-4"/> مشاركة PDF
                                 </Button>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2">
-                                <Button onClick={handleExportHouses} variant="secondary" className="text-xs px-2" title="تصدير Excel">
+                                <Button onClick={handleExportHouses} variant="secondary" className="text-[10px] md:text-xs px-1 md:px-2 flex flex-col md:flex-row gap-1 items-center" title="تصدير Excel">
                                     <DownloadIcon className="w-4 h-4"/> حالة العقارات
                                 </Button>
-                                <Button onClick={handleSharePropertiesPDF} className="bg-green-600 hover:bg-green-700 text-xs px-2" title="مشاركة واتساب">
+                                <Button onClick={handleSharePropertiesPDF} className="bg-green-600 hover:bg-green-700 text-[10px] md:text-xs px-1 md:px-2 flex flex-col md:flex-row gap-1 items-center" title="مشاركة واتساب">
                                     <WhatsAppIcon className="w-4 h-4"/> مشاركة PDF
                                 </Button>
                             </div>
@@ -290,9 +339,9 @@ const StatBox = ({ label, value, color }: any) => {
         yellow: 'from-yellow-500 to-yellow-700',
     };
     return (
-        <div className={`p-6 rounded-2xl bg-gradient-to-br ${colors[color]} text-white shadow-xl transform transition hover:-translate-y-1`}>
+        <div className={`p-4 md:p-6 rounded-2xl bg-gradient-to-br ${colors[color]} text-white shadow-xl transform transition hover:-translate-y-1`}>
             <p className="text-xs opacity-80 mb-1">{label}</p>
-            <p className="text-3xl font-bold">{value}</p>
+            <p className="text-2xl md:text-3xl font-bold">{value}</p>
         </div>
     );
 };
@@ -358,15 +407,17 @@ const PropertyManagementScreen = () => {
 
     return (
         <div className="space-y-6 animate-fadeIn">
-            <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">إدارة العقارات</h2>
-                <div className="flex gap-4">
-                    <Select label="" value={selectedLoc} onChange={e => setSelectedLoc(e.target.value)}>
-                        <option value="">كل المناطق</option>
-                        {context?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                    </Select>
-                    <Button onClick={() => setLocationModalOpen(true)} variant="secondary">إدارة المواقع</Button>
-                    <Button onClick={() => setAddModalOpen(true)} variant="primary">إضافة عقار +</Button>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <h2 className="text-xl md:text-2xl font-bold">إدارة العقارات</h2>
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                    <div className="flex-1 md:flex-none">
+                        <Select label="" value={selectedLoc} onChange={e => setSelectedLoc(e.target.value)}>
+                            <option value="">كل المناطق</option>
+                            {context?.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </Select>
+                    </div>
+                    <Button onClick={() => setLocationModalOpen(true)} variant="secondary" className="flex-1 md:flex-none text-xs md:text-sm">إدارة المواقع</Button>
+                    <Button onClick={() => setAddModalOpen(true)} variant="primary" className="flex-1 md:flex-none text-xs md:text-sm">إضافة عقار +</Button>
                 </div>
             </div>
 
@@ -465,13 +516,13 @@ const ApprovalsScreen = () => {
             {/* Lease Requests */}
             {pendingLease.length > 0 && (
                 <div className="mb-8">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <h2 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
                         <span className="bg-blue-100 text-blue-600 p-1 rounded">عقود</span>
                         طلبات تأجير جديدة
                     </h2>
                     <div className="grid gap-4">
                         {pendingLease.map(req => (
-                            <Card key={req.id} className="flex items-center justify-between shadow-md border-r-4 border-blue-500">
+                            <Card key={req.id} className="flex flex-col md:flex-row items-start md:items-center justify-between shadow-md border-r-4 border-blue-500 gap-4">
                                 <div className="flex items-center gap-4">
                                     <div className="bg-blue-100 p-3 rounded-full text-blue-600"><UserIcon /></div>
                                     <div>
@@ -479,9 +530,9 @@ const ApprovalsScreen = () => {
                                         <p className="text-xs text-gray-500">طلب استئجار: {context?.houses.find(h=>h.id===req.houseId)?.name}</p>
                                     </div>
                                 </div>
-                                <div className="flex gap-3">
-                                    <Button variant="danger" onClick={() => context?.rejectLeaseRequest(req.id)}><XCircleIcon className="w-4 h-4"/> رفض</Button>
-                                    <Button variant="success" onClick={() => context?.approveLeaseRequest(req.id)}><CheckCircleIcon className="w-4 h-4"/> اعتماد</Button>
+                                <div className="flex gap-3 w-full md:w-auto">
+                                    <Button variant="danger" className="flex-1 md:flex-none" onClick={() => context?.rejectLeaseRequest(req.id)}><XCircleIcon className="w-4 h-4"/> رفض</Button>
+                                    <Button variant="success" className="flex-1 md:flex-none" onClick={() => context?.approveLeaseRequest(req.id)}><CheckCircleIcon className="w-4 h-4"/> اعتماد</Button>
                                 </div>
                             </Card>
                         ))}
@@ -492,7 +543,7 @@ const ApprovalsScreen = () => {
             {/* Vacate Requests */}
             {pendingVacate.length > 0 && (
                 <div className="mb-8">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <h2 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
                          <span className="bg-red-100 text-red-600 p-1 rounded">إخلاء</span>
                          طلبات إخلاء ومراجعة الفيديو
                     </h2>
@@ -502,8 +553,8 @@ const ApprovalsScreen = () => {
                             const tenant = context?.tenants.find(t=>t.id===req.tenantId);
                             return (
                                 <Card key={req.id} className="shadow-md border-r-4 border-red-500">
-                                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                                        <div className="flex items-center gap-4 flex-1">
+                                    <div className="flex flex-col gap-4">
+                                        <div className="flex items-center gap-4">
                                             <div className="bg-red-100 p-3 rounded-full text-red-600"><HomeIcon /></div>
                                             <div>
                                                 <p className="font-bold text-lg">{house?.name}</p>
@@ -512,13 +563,13 @@ const ApprovalsScreen = () => {
                                             </div>
                                         </div>
                                         
-                                        <div className="flex items-center gap-3">
-                                            <Button onClick={() => setViewVideoUrl(req.videoDataUrl)} className="bg-gray-800 text-white hover:bg-black">
+                                        <div className="flex flex-wrap gap-2 w-full">
+                                            <Button onClick={() => setViewVideoUrl(req.videoDataUrl)} className="bg-gray-800 text-white hover:bg-black w-full md:w-auto">
                                                 مشاهدة الفيديو
                                             </Button>
-                                            <div className="h-8 w-px bg-gray-300 mx-2"></div>
-                                            <Button variant="danger" onClick={() => context?.rejectVacateRequest(req.id)}>رفض الإخلاء</Button>
-                                            <Button variant="success" onClick={() => context?.approveVacateRequest(req.id)}>إتمام الإخلاء</Button>
+                                            <div className="hidden md:block h-8 w-px bg-gray-300 mx-2"></div>
+                                            <Button variant="danger" className="flex-1 md:flex-none" onClick={() => context?.rejectVacateRequest(req.id)}>رفض الإخلاء</Button>
+                                            <Button variant="success" className="flex-1 md:flex-none" onClick={() => context?.approveVacateRequest(req.id)}>إتمام الإخلاء</Button>
                                         </div>
                                     </div>
                                 </Card>
@@ -576,8 +627,8 @@ const CashHandoverScreen = () => {
 
     return (
         <div className="space-y-6 animate-fadeIn">
-            <h2 className="text-2xl font-bold">تسليم المبالغ النقدية</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <h2 className="text-xl md:text-2xl font-bold">تسليم المبالغ النقدية</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
                 <Card title="تسجيل عملية استلام">
                     <Input label="المبلغ المستلم من المحصل" type="number" value={amount} onChange={e => setAmount(parseFloat(e.target.value))} />
                     <Button className="w-full mt-4" onClick={() => {
@@ -586,7 +637,7 @@ const CashHandoverScreen = () => {
                 </Card>
                 <Card>
                      <div className="flex justify-between items-center mb-4 border-b pb-2">
-                        <h2 className="text-xl font-bold text-gray-800">تاريخ التسليمات</h2>
+                        <h2 className="text-lg md:text-xl font-bold text-gray-800">تاريخ التسليمات</h2>
                         <div className="flex gap-2">
                              <button onClick={handleExport} className="p-1 rounded-full hover:bg-gray-100 text-gray-600 transition-colors" title="تصدير Excel">
                                 <DownloadIcon className="w-5 h-5"/>

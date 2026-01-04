@@ -33,19 +33,19 @@ const CollectorDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) =>
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 font-sans">
-      <header className="bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg p-4 flex justify-between items-center text-white">
+      <header className="bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg p-3 md:p-4 flex justify-between items-center text-white shrink-0 z-10">
         <div className="flex items-center gap-2">
-            <BuildingIcon className="w-8 h-8" />
-            <h1 className="text-xl font-bold">بوابة المحصل</h1>
+            <BuildingIcon className="w-6 h-6 md:w-8 md:h-8" />
+            <h1 className="text-lg md:text-xl font-bold">بوابة المحصل</h1>
         </div>
-        <button onClick={onLogout} className="text-sm bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full transition-all">خروج</button>
+        <button onClick={onLogout} className="text-xs md:text-sm bg-white/20 hover:bg-white/30 px-3 py-1.5 md:px-4 md:py-2 rounded-full transition-all">خروج</button>
       </header>
       
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24">
+      <main className="flex-1 overflow-y-auto p-3 md:p-6 pb-24">
         {renderCurrentView()}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 flex justify-around shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-2 md:p-3 flex justify-around shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20">
         <NavButton active={currentView === 'collection'} onClick={() => setCurrentView('collection')} icon={<DollarSignIcon />} label="التحصيل" />
         <NavButton active={currentView === 'vacant'} onClick={() => setCurrentView('vacant')} icon={<HomeIcon />} label="العقارات" />
         <NavButton active={currentView === 'reports'} onClick={() => setCurrentView('reports')} icon={<ReportIcon />} label="التقارير" />
@@ -55,9 +55,9 @@ const CollectorDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) =>
 };
 
 const NavButton = ({ active, onClick, icon, label }: any) => (
-    <button onClick={onClick} className={`flex flex-col items-center gap-1 transition-colors ${active ? 'text-blue-600' : 'text-gray-400'}`}>
-        {icon}
-        <span className="text-xs font-bold">{label}</span>
+    <button onClick={onClick} className={`flex flex-col items-center gap-1 transition-colors w-16 ${active ? 'text-blue-600' : 'text-gray-400'}`}>
+        <div className="w-6 h-6">{icon}</div>
+        <span className="text-[10px] md:text-xs font-bold">{label}</span>
     </button>
 );
 
@@ -94,9 +94,9 @@ const CollectionScreen = () => {
     };
 
     return (
-        <div className="space-y-6 animate-fadeIn">
+        <div className="space-y-4 md:space-y-6 animate-fadeIn">
             <Card className="border-r-4 border-blue-600">
-                <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex flex-col md:flex-row gap-3">
                     <div className="flex-1">
                         <Input label="البحث عن شقة أو مستأجر" placeholder="اكتب الاسم هنا..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                     </div>
@@ -109,9 +109,9 @@ const CollectionScreen = () => {
                 </div>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 {filteredHouses.map(house => (
-                    <button key={house.id} onClick={() => handleHouseSelect(house)} className={`p-5 rounded-xl text-right transition-all border-2 flex flex-col gap-2 ${selectedHouse?.id === house.id ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-white bg-white hover:border-blue-200'}`}>
+                    <button key={house.id} onClick={() => handleHouseSelect(house)} className={`p-4 md:p-5 rounded-xl text-right transition-all border-2 flex flex-col gap-2 ${selectedHouse?.id === house.id ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-white bg-white hover:border-blue-200'}`}>
                         <div className="flex justify-between items-start">
                              <h3 className="font-bold text-lg text-gray-800">{house.name}</h3>
                              {house.dueAmount > 0 ? <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">مطلوب سداد</span> : <span className="text-[10px] bg-green-100 text-green-600 px-2 py-0.5 rounded-full font-bold">مسدد</span>}
@@ -127,13 +127,13 @@ const CollectionScreen = () => {
             </div>
 
             {selectedHouse && (
-                <div className="fixed bottom-24 left-4 right-4 animate-slideUp">
+                <div className="fixed bottom-24 left-4 right-4 animate-slideUp z-30">
                     <Card className="bg-blue-600 text-white shadow-2xl flex items-center justify-between p-4">
                         <div>
                             <p className="text-xs opacity-80">تحصيل من: {selectedHouse.name}</p>
                             <p className="font-bold">{selectedHouse.dueAmount.toLocaleString()} ريال</p>
                         </div>
-                        <Button variant="success" onClick={() => setPaymentModalOpen(true)} className="bg-white text-blue-600 hover:bg-gray-100">تسجيل دفعة</Button>
+                        <Button variant="success" onClick={() => setPaymentModalOpen(true)} className="bg-white text-blue-600 hover:bg-gray-100 text-sm px-4">تسجيل دفعة</Button>
                     </Card>
                 </div>
             )}
@@ -279,10 +279,10 @@ const VacantHousesScreen = () => {
     const pendingHouseIds = context?.vacateRequests.filter(v => v.status === 'pending').map(v => v.houseId) || [];
 
     return (
-        <div className="space-y-8 animate-fadeIn">
+        <div className="space-y-6 md:space-y-8 animate-fadeIn">
             <div>
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><HomeIcon className="w-5 h-5 text-green-600"/> منازل فارغة (للتأجير)</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <h2 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center gap-2"><HomeIcon className="w-5 h-5 text-green-600"/> منازل فارغة (للتأجير)</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                     {context?.houses.filter(h => !h.tenantId).map(house => (
                         <Card key={house.id} className="border-t-4 border-green-500">
                             <h3 className="font-bold text-lg">{house.name}</h3>
@@ -294,8 +294,8 @@ const VacantHousesScreen = () => {
             </div>
 
             <div>
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><HomeIcon className="w-5 h-5 text-red-600"/> منازل مؤجرة (للإخلاء)</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <h2 className="text-lg md:text-xl font-bold mb-3 md:mb-4 flex items-center gap-2"><HomeIcon className="w-5 h-5 text-red-600"/> منازل مؤجرة (للإخلاء)</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                     {context?.houses.filter(h => h.tenantId).map(house => {
                         const isPending = pendingHouseIds.includes(house.id);
                         return (
